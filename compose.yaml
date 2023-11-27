@@ -1,0 +1,4 @@
+scalableArango2:
+
+  volumes: 
+    - ./
