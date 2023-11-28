@@ -15,7 +15,8 @@ To set up the arangodb docker image
     'docker pull arangodb/arangodb'
 
 2. Start a docker instace with this command
-    'docker run -e ARANGO_ROOT_PASSWORD=pswd1 -p 8529:8529 -d --name scalableArango arangodb/arangodb'
+
+    `docker run -e ARANGO_ROOT_PASSWORD=pswd1 -p 8529:8529 -d --name scalableArango arangodb/arangodb`
 
     ```
         // note that the password can be anything, but do not forget it.
@@ -23,7 +24,7 @@ To set up the arangodb docker image
     ```
 
 3. start the arango interactive shell with this command
-    'docker exec -it scalableArango arangosh'
+    `docker exec -it scalableArango arangosh`
 
     ```
         // 'scalableArango2' is the name of our container
