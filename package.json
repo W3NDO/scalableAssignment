@@ -1,9 +1,10 @@
 {
   "dependencies": {
     "arangojs": "^8.6.0",
+    "csv-parse": "^5.5.2",
     "mongodb": "^6.3.0"
   },
   "scripts": {
-    "run": "node ./src/loader.js"
+    "start": "node ./src/loader.js"
   }
 }

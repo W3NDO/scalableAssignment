@@ -17,20 +17,21 @@ def process_csv(input_file)
     first_and_third_column << "#{first_column},\"#{third_column}\""
 
     # Process for the second output file (reordered columns)
-    reordered_columns << "#{second_column}, #{first_column}, #{third_column}"
+    reordered_columns << "#{second_column},#{first_column},\"#{third_column}\""
     pp line
   end
 
   # Write to the first output file
-  File.open('anime-nodes.csv', 'w') do |file|
+  File.open('./datasets/anime_nodes.csv', 'w') do |file|
     file.puts(first_and_third_column)
   end
 
   # Write to the second output file
-  File.open('anime-edge-definition.csv', 'w') do |file|
+  File.open('./datasets/anime_edge_definition.csv', 'w') do |file|
     file.puts(reordered_columns)
   end
 end
+# Replace 'input.csv' with your actual CSV file names 
 
-# Replace 'input.csv' with your actual CSV file name
-process_csv('anime-ontology.csv')
+csv_input_file = File.open('./datasets/anime-ontology.csv', 'r+')
+process_csv(csv_input_file)

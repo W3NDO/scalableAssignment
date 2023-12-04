@@ -9,15 +9,15 @@ const mongoClient = new MongoClient(mongoUri, {
   }
 });
 
-async function run(){
-  try{
-    await mongoClient.connect();
-    serverStatus[0] = true
-    await mongoClient.db("admin").command({ ping: 1})
-    console.log("Pinged scalableMongo")
-  } finally {
-    await mongoClient.close();
-  }
-}
+// async function run(){
+//   try{
+//     await mongoClient.connect();
+//     serverStatus[0] = true
+//     await mongoClient.db("admin").command({ ping: 1})
+//     console.log("Pinged scalableMongo")
+//   } finally {
+//     await mongoClient.close();
+//   }
+// }
 
-run().catch(console.dir);
+// run().catch(console.dir);
