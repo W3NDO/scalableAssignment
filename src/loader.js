@@ -86,40 +86,103 @@ async function loadDataAsObjects(filePath) {
   return records;
 };
 
-async function arangoLoadGraphData(client, filePath){
+async function arangoLoadNodes(client, filePath){
+  var nodes = await loadDataAsObjects(filePath)
+  let [n, iterNodes] = nodes
+  for (const node of nodes){
+    var nodeInsertQuery;
+    if(true){
+      nodeInsertQuery = aql`
+        UPSERT {
+          _key: ${node[0]},
+          name: ${node[0]}
+        }
+        INSERT {
+          _key: ${node[0]},
+          name: ${node[0]}
+        }
+        UPDATE {}
+        IN "fake_social_media"
+      `
+    }
+      // console.log("QUERY: ", nodeInsertQuery)
+    await client.query(nodeInsertQuery)
+  }
+}
+
+async function arangoLoadEdges(client, filePath){
   var records = await loadDataAsObjects(filePath)
-  records = records.slice(100, 150);
+  let nodes;
   for(const record of records ){
-    console.log((record[1]))
     const [edge, srcNode, destNode] = record
-    if (String(edge) === 'description' ){ continue } 
-    if (String(edge) === 'rdf-schema#comment'){ continue }
-    if(String(edge) === 'concept'){ continue }
+    if (srcNode === "subject") { continue }
+    console.log([edge, srcNode, destNode])
+    var edgeInsertQuery = {
+      "query": "UPSERT { _from: @sourceNode, _to: @destNode, edge: {name: @edgeName} } INSERT { _from: @sourceNode, _to: @destNode, edge: {name: @edgeName }} UPDATE {} IN @@edgeCollection ",
+      "bindVars" : {
+          "@edgeCollection": "fake_social_media_edges",
+          "sourceNode": `fake_social_media/${srcNode}` ,
+          "destNode": `fake_social_media/${destNode}`,
+          "edgeName": "follows",
+      }
+    }
 
-    var srcNodeInsertQuery = aql`
-      INSERT { 
-        srcNodeKey: ${srcNode},
-        anime: ${srcNode} 
-      }  INTO "anime-ontology" RETURN NEW`
-
-    var destNodeInsertQuery = aql`
-      INSERT { 
-        destNodeKey: ${srcNode},
-        ${edge}: ${String(destNode)}
-      } INTO "anime-ontology" RETURN NEW`
-
-    var buildEdgesQuery = aql`` //TODO get the srcNodeKey id, get the destNodekey, get the edge, link
-
-    let arangoSrcNodeID = await client.query(srcNodeInsertQuery);
-    let arangoDestNodeID = await client.query(destNodeInsertQuery);
-
-    console.log("SRC = ", arangoSrcNodeID, "DEST = ", arangoDestNodeID)
-    // await client.query(
-    //   `UPSERT { _from: 'anime-ontology/${arangoSrcNodeID}', _to: 'anime-ontology/${arangoDestNodeID}'} 
-    //   INSERT { _from: 'anime-ontology/${arangoSrcNodeID}', _to: 'anime-ontology/${arangoDestNodeID}'} 
-    //   UPDATE {} INTO "anime-ontology-edges" `   
-    // );
+    await client.query(edgeInsertQuery);
+    // let arangoDestNodeID = await client.query(destNodeInsertQuery);
+    
   }  
+
+  const getSrcDestNodes = async () => {
+    let collectionName = "fake_social_media"
+    var getNodesQuery = {
+      "query": "FOR u IN @@collection RETURN u",
+      "bindVars": {
+        "@collection": "fake_social_media"
+      }   
+    }
+    nodes = await client.query(getNodesQuery);
+    let edgeSrcDest = [];
+
+    await nodes.forEach(async n => {
+      if (n.follows){
+        edgeSrcDest.push({
+          from : `${collectionName}/${n._key}` || null, 
+          edge : "follows" ,
+          to : `${collectionName}/${n.follows}` || null
+        })
+      }
+    });
+    return edgeSrcDest;
+  }
+
+  const buildEdges = async () => {
+    let buildEdgesQuery = async (edgeBuilderObject) => {
+      query =  {
+        "query": "UPSERT { _from: @sourceNode, _to: @destNode, edge: { name: @edgeName } } INSERT { _from: @sourceNode, _to: @destNode, edge: { name: @edgeName } } UPDATE {} INTO @@edgeCollection ",
+        "bindVars" : {
+            "@edgeCollection": "fake_social_media_edges",
+            "sourceNode": edgeBuilderObject["from"] ,
+            "destNode": edgeBuilderObject["to"],
+            "edgeName": edgeBuilderObject["edge"],
+        }
+      }
+
+      await client.query(query)
+    }
+
+    const edgeBuilderInfo = await getSrcDestNodes();
+    let queryList = []
+    edgeBuilderInfo.forEach((user) => {
+      queryList.push(buildEdgesQuery(user))
+    })
+    return queryList;
+  }
+
+  // console.log( "QUERY : ", await buildEdges())
+  let queries = await buildEdges()
+  // queries.forEach( async query => {
+  //   await client.query(query)
+  // })
 }
 
 
@@ -136,7 +199,15 @@ console.log("MongoDB vs ArangoDB: The grand showdown!")
 // console.log(serverStatus)
 
 // console.time("Arango Load Time")
-arangoLoadGraphData(arangoClient, '/home/w3ndo/Desktop/Course Work/Scalable Data Management Systems/project/src/datasets/anime_edge_definition.csv' )
+// arangoLoadNodes(arangoClient, '/home/w3ndo/Desktop/Course Work/Scalable Data Management Systems/project/src/datasets/fake_users.csv' )
+//   .then( ()=> {
+//     console.log('Graph Data Loaded successfully')
+//   })
+//   .catch( (err) => [
+//     console.log('Error Loading Graph Data: ', err )
+//   ])
+  arangoLoadNodes(arangoClient, '/home/w3ndo/Desktop/Course Work/Scalable Data Management Systems/project/src/datasets/fake_users.csv' )
+  arangoLoadEdges(arangoClient, '/home/w3ndo/Desktop/Course Work/Scalable Data Management Systems/project/src/datasets/fake_social_media.csv' )
   .then( ()=> {
     console.log('Graph Data Loaded successfully')
   })

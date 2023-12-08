@@ -2,8 +2,8 @@ require 'csv'
 
 def process_csv(input_file)
   # Initialize arrays to store data
-  first_and_third_column = ["anime, value"]
-  reordered_columns = ["concept, anime, value"]
+  first_and_third_column = ["subject, object"]
+  reordered_columns = ["predicate, subject, object"]
   line = 0
   # Read CSV file
   CSV.foreach(input_file, headers: false) do |row|
@@ -22,16 +22,16 @@ def process_csv(input_file)
   end
 
   # Write to the first output file
-  File.open('./datasets/anime_nodes.csv', 'w') do |file|
+  File.open('./datasets/tetris_nodes.csv', 'w') do |file|
     file.puts(first_and_third_column)
   end
 
   # Write to the second output file
-  File.open('./datasets/anime_edge_definition.csv', 'w') do |file|
+  File.open('./datasets/tetris_edge_definition.csv', 'w') do |file|
     file.puts(reordered_columns)
   end
 end
 # Replace 'input.csv' with your actual CSV file names 
 
-csv_input_file = File.open('./datasets/anime-ontology.csv', 'r+')
+csv_input_file = File.open('/home/w3ndo/Desktop/Course Work/Scalable Data Management Systems/project/src/datasets/tetris-dataset-triples.csv', 'r+')
 process_csv(csv_input_file)
