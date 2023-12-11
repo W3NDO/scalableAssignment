@@ -166,6 +166,7 @@ async function arangoLoadNodes(client, filePath) {
     }
     await client.query(nodeInsertQuery);
   }
+
 }
 
 // inserts edge definition documents into an edge collection
@@ -181,7 +182,7 @@ async function arangoLoadEdges(
     if (srcNode === "subject") {
       continue;
     }
-    console.log([edge, srcNode, destNode]);
+    // console.log([edge, srcNode, destNode]);
     var edgeInsertQuery = {
       query:
         "UPSERT { _from: @sourceNode, _to: @destNode, edge: {name: @edgeName} } INSERT { _from: @sourceNode, _to: @destNode, edge: {name: @edgeName }} UPDATE {} IN @@edgeCollection ",
@@ -193,8 +194,9 @@ async function arangoLoadEdges(
       },
     };
 
-    await client.query(edgeInsertQuery);
-  }
+    await client.query(edgeInsertQuery);   
+  }  
+  
 }
 
 let serverStatus = [arangoClient, mongoClient];
@@ -209,18 +211,22 @@ console.log("MongoDB vs ArangoDB: The grand showdown!");
 
 // build the graph on arangoDB
 const buildArangoGraph = async (nodeFilePath, edgesFilePath) => {
-  arangoLoadNodes(arangoClient, nodeFilePath);
-  arangoLoadEdges(
-    arangoClient,
-    edgesFilePath,
-    "fakeSocialMediaWithAge",
-    "fakeSocialMediaWithAgeEdges"
-  )
-    .then(() => {
-      console.log("ARANGO :: Graph Data Loaded successfully");
-    })
-    .catch((err) => [console.log("ARANGO :: Error Loading Graph Data: ", err)]);
-};
+  const startTime = performance.now()
+  let nodeInsertEndTime, edgeInsertEndTime;
+  arangoLoadNodes(arangoClient, nodeFilePath).then( () => { nodeInsertEndTime = performance.now()})
+  arangoLoadEdges(arangoClient, edgesFilePath, "fakeSocialMediaWithAge" ,"fakeSocialMediaWithAgeEdges")
+  .then( ()=> {
+    console.log('ARANGO :: Graph Data Loaded successfully')
+    edgeInsertEndTime = performance.now()
+  })
+  .catch( (err) => [
+    console.log('ARANGO :: Error Loading Graph Data: ', err )
+  ])
+
+  console.log( "Node Insert Time: ", nodeInsertEndTime - startTime)
+  console.log( "Node Insert Time: ", edgeInsertEndTime - nodeInsertEndTime)
+  console.log( "Node Insert Time: ", edgeInsertEndTime - startTime)
+}
 
 nodeFilePath =
   "/home/w3ndo/Desktop/Course Work/Scalable Data Management Systems/project/src/datasets/fake_users2.csv";
