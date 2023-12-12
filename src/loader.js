@@ -5,6 +5,7 @@ const fs = require("fs");
 var path = require('path');
 const { parse } = require("csv-parse");
 const { finished } = require("stream/promises");
+const performanceNow = require("performance-now");
 
 /***
  * ARANGO Client Setup
@@ -206,21 +207,15 @@ console.log("MongoDB vs ArangoDB: The grand showdown!");
 
 // build the graph on arangoDB
 const buildArangoGraph = async (nodeFilePath, edgesFilePath) => {
-  const startTime = performance.now()
   let nodeInsertEndTime, edgeInsertEndTime;
   arangoLoadNodes(arangoClient, nodeFilePath).then( () => { nodeInsertEndTime = performance.now()})
   arangoLoadEdges(arangoClient, edgesFilePath, "fakeSocialMediaWithAge" ,"fakeSocialMediaWithAgeEdges")
   .then( ()=> {
     console.log('ARANGO :: Graph Data Loaded successfully')
-    edgeInsertEndTime = performance.now()
   })
   .catch( (err) => [
     console.log('ARANGO :: Error Loading Graph Data: ', err )
   ])
-
-  console.log( "Node Insert Time: ", nodeInsertEndTime - startTime)
-  // console.log( "Node Insert Time: ", edgeInsertEndTime - nodeInsertEndTime)
-  // console.log( "Node Insert Time: ", edgeInsertEndTime - startTime)
 }
 
 // buildArangoGraph(nodeFilePath, edgesFilePath);
@@ -235,8 +230,10 @@ const singleReadQuery = async (client, collectionName) => {
     RETURN doc
   `);
 
-  const doc = await singleReadQuery.all()
-  console.log(doc)
+  // const doc = await singleReadQuery.all()
+  // console.log(doc)
+
+  await singleReadQuery.all()
 }
 
 const singleWriteQuery = async (client, collectionName) => {
@@ -286,8 +283,9 @@ const aggregationQuery = async (client, collectionName) => {
       "count" : length 
     }
   `)
-  let ageDistribution = await ageDistributionQuery.all()
-  console.log(ageDistribution)
+  // let ageDistribution = await ageDistributionQuery.all()
+  // return ageDistribution
+  await ageDistributionQuery.all()
 }
 
 const distinctNeighbourSecondOrderQuery = async (client, collectionName) => {
@@ -302,7 +300,7 @@ const distinctNeighbourSecondOrderQuery = async (client, collectionName) => {
   `) // graph traversal queries allow for parallelism. 
 
   let mutualFollowers = await mutualFollowersQuery.all()
-  console.log(mutualFollowers)
+  // console.log(mutualFollowers)
 }
 
 
@@ -312,4 +310,29 @@ const distinctNeighbourSecondOrderQuery = async (client, collectionName) => {
 // singleReadQuery(arangoClient, "fakeSocialMediaWithAge")
 // singleWriteQuery(arangoClient, "fakeSocialMediaWithAge")
 // aggregationQuery(arangoClient, "fakeSocialMediaWithAge")
-distinctNeighbourSecondOrderQuery(arangoClient, "fakeSocialMediaWithAge")
+
+
+async function measureExecutionTime(functionToTime, functionName, args) {
+  const startTime = performanceNow();
+  
+  await functionToTime(...args)
+
+  const endTime = performanceNow();
+
+  const executionTime = endTime - startTime;
+
+  console.log(`${functionName} : ${executionTime} milliseconds`);
+}
+
+const arangoFunctions = {
+  "Load Graph" : [buildArangoGraph, [nodeFilePath, edgesFilePath]],
+  "Single Read Query": [singleReadQuery, [arangoClient, "fakeSocialMediaWithAge"]],
+  "Single Write Query": [singleWriteQuery, [arangoClient, "fakeSocialMediaWithAge"]],
+  "Aggregation Query": [aggregationQuery, [arangoClient, "fakeSocialMediaWithAge"]],
+  "Distinct Neighbours Second Order": [distinctNeighbourSecondOrderQuery, [arangoClient, "fakeSocialMediaWithAge"]]
+}
+
+Object.keys(arangoFunctions).forEach((metric) => {
+  console.log(arangoFunctions[metric])
+  measureExecutionTime(arangoFunctions[metric][0], metric, arangoFunctions[metric][1])
+} )

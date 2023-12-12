@@ -2,7 +2,8 @@
   "dependencies": {
     "arangojs": "^8.6.0",
     "csv-parse": "^5.5.2",
-    "mongodb": "^6.3.0"
+    "mongodb": "^6.3.0",
+    "performance-now": "^2.1.0"
   },
   "scripts": {
     "start": "node ./src/loader.js"
