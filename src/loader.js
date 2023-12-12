@@ -275,5 +275,41 @@ const singleWriteQuery = async (client, collectionName) => {
   await makeFamousQuery.next()
 }
 
+const aggregationQuery = async (client, collectionName) => {
+  // For aggregation we will compute the age distribution of our users for marketing purposes
+  let collection = client.collection(collectionName)
+  let ageDistributionQuery = await client.query(aql`
+    FOR u IN ${collection}
+    COLLECT age = u.age WITH COUNT INTO length
+    RETURN { 
+      "age" : age, 
+      "count" : length 
+    }
+  `)
+  let ageDistribution = await ageDistributionQuery.all()
+  console.log(ageDistribution)
+}
 
-singleWriteQuery(arangoClient, "fakeSocialMediaWithAge")
+const distinctNeighbourSecondOrderQuery = async (client, collectionName) => {
+  // given a user, find all their followers and the mutual followers.
+  let collection = client.collection(collectionName)
+  let user = await collection.document("Bogdan_22")
+  let mutualFollowersQuery = await client.query(aql`
+  FOR vertex IN 2..2 OUTBOUND ${user._id}
+    GRAPH 'fakeSMGraph'
+    OPTIONS{parallelism:8,order:'dfs'}
+    RETURN vertex.name
+  `) // graph traversal queries allow for parallelism. 
+
+  let mutualFollowers = await mutualFollowersQuery.all()
+  console.log(mutualFollowers)
+}
+
+
+/***
+ * BENCHMARK QUERIES
+ */
+// singleReadQuery(arangoClient, "fakeSocialMediaWithAge")
+// singleWriteQuery(arangoClient, "fakeSocialMediaWithAge")
+// aggregationQuery(arangoClient, "fakeSocialMediaWithAge")
+distinctNeighbourSecondOrderQuery(arangoClient, "fakeSocialMediaWithAge")
