@@ -286,8 +286,6 @@ const aggregationQueryMongo = async (client, collectionName) => {
   const database = client.db("users");
   const collection = database.collection(collectionName);
 
-  // For aggregation we will compute the age distribution of our users for marketing purposes
-
   const ageDistributionQuery = await collection
     .aggregate([
       {
@@ -345,7 +343,7 @@ const distinctNeighbourSecondOrderQueryMongo = async (
       let mutualFollowerDetails = await collection.findOne({
         username: mutualFollower.user2,
       });
-      // if mutualFOllowerDetails.name not in mutualFollowers then add it
+
       if (!mutualFollowers.includes(mutualFollowerDetails.name)) {
         mutualFollowers.push(mutualFollowerDetails.name);
       }
