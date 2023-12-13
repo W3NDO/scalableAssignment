@@ -314,7 +314,9 @@ const distinctNeighbourSecondOrderQueryMongo = async (
   let collection = database.collection(collectionName);
   let collectionEdges = database.collection("usersEdgesData");
 
-  let user = await collection.findOne({ username: "Genie_94" });
+  const getUsers = await collection.find({ age: { $gt: -1 } }).toArray();
+
+  let user = await getUsers[Math.floor(Math.random() * getUsers.length)];
 
   let followersOfUser = await collectionEdges
     .find({ user2: user.username })
@@ -353,10 +355,10 @@ const distinctNeighbourSecondOrderQueryMongo = async (
   console.log(mutualFollowers);
 };
 
-distinctNeighbourSecondOrderQueryMongo(mongoClient, "usersData").then(() => {
-  console.log("Mongo :: Distinct Neighbour Second Order Query Completed");
-  mongoClient.close();
-});
+// distinctNeighbourSecondOrderQueryMongo(mongoClient, "usersData").then(() => {
+//   console.log("Mongo :: Distinct Neighbour Second Order Query Completed");
+//   mongoClient.close();
+// });
 
 // singleReadMongo(mongoClient, "usersData").then(() => {
 //   console.log("Mongo :: Single Read Query Completed");
@@ -483,16 +485,100 @@ async function measureExecutionTime(functionToTime, functionName, args) {
   const executionTime = endTime - startTime;
 
   console.log(`${functionName} : ${executionTime} milliseconds`);
+  return executionTime;
 }
 
-measureExecutionTime(singleReadMongo, "Single Read Query", [
+const averageTimeReadMongo = async (mongoClient, collectionName) => {
+  let totalTime = 0;
+
+  for (let i = 0; i < 1000; i++) {
+    let executionTime = await measureExecutionTime(
+      singleReadMongo,
+      "Single Read Query Mongo",
+      [mongoClient, collectionName]
+    );
+
+    totalTime += executionTime;
+  }
+
+  mongoClient.close();
+  return totalTime / 1000;
+};
+
+const averageTimeWriteMongo = async (mongoClient, collectionName) => {
+  let totalTime = 0;
+
+  for (let i = 0; i < 1000; i++) {
+    let executionTime = await measureExecutionTime(
+      singleWriteMongo,
+      "Single Write Query Mongo",
+      [mongoClient, collectionName]
+    );
+
+    totalTime += executionTime;
+  }
+
+  mongoClient.close();
+  return totalTime / 1000;
+};
+
+const averageTimeAggregationMongo = async (mongoClient, collectionName) => {
+  let totalTime = 0;
+
+  for (let i = 0; i < 250; i++) {
+    let executionTime = await measureExecutionTime(
+      aggregationQueryMongo,
+      "Aggregation Query Mongo",
+      [mongoClient, collectionName]
+    );
+
+    totalTime += executionTime;
+  }
+
+  mongoClient.close();
+  return totalTime / 250;
+};
+
+const averageTimeDistinctNeighbourSecondOrderMongo = async (
   mongoClient,
-  "usersData",
-]);
-measureExecutionTime(singleReadMongo, "Single Read Query", [
-  mongoClient,
-  "usersData",
-]);
+  collectionName
+) => {
+  let totalTime = 0;
+
+  for (let i = 0; i < 250; i++) {
+    let executionTime = await measureExecutionTime(
+      distinctNeighbourSecondOrderQueryMongo,
+      "Distinct Neighbour Second Order Mongo",
+      [mongoClient, collectionName]
+    );
+
+    totalTime += executionTime;
+  }
+
+  mongoClient.close();
+  return totalTime / 250;
+};
+
+// averageTimeReadMongo(mongoClient, "usersData").then((averageTime) => {
+//   console.log("Average Execution Time For Read Query: " + averageTime);
+// }); // after some runs --> 67.82984070008993
+
+// averageTimeWriteMongo(mongoClient, "usersData").then((averageTime) => {
+//   console.log("Average Execution Time For Write Query: " + averageTime);
+// }); // after a run --> 3004.8619921003283
+
+// averageTimeAggregationMongo(mongoClient, "usersData").then((averageTime) => {
+//   console.log("Average Execution Time For Aggregation Query: " + averageTime);
+// }); // after some runs -->  31.546256799817087
+
+// averageTimeDistinctNeighbourSecondOrderMongo(mongoClient, "usersData").then(
+//   (averageTime) => {
+//     console.log(
+//       "Average Execution Time For Distinct Neighbour Second Order Query: " +
+//         averageTime
+//     );
+//   }
+// ); // after some run --> 318.701121199131
 
 // single read and write 1000 times
 // aggregation query 250
