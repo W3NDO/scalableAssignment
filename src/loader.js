@@ -33,7 +33,7 @@ const arangoClient = arangojs({
  * MongoClient Setup
  */
 const mongoUri =
-  "mongodb+srv://bogdandragomirgeorge:bEfNfE1qoLmiNH4y@cluster0.bioh4ut.mongodb.net/?retryWrites=true&w=majority";
+  "mongodb://mongoadmin:pswd1@localhost:27888";
 // const mongoUri =
 //   "mongodb+srv://bogdandragomirgeorge:bEfNfE1qoLmiNH4y@cluster0.bioh4ut.mongodb.net/?retryWrites=true&w=majority";
 const mongoClient = new MongoClient(mongoUri, {
@@ -41,38 +41,32 @@ const mongoClient = new MongoClient(mongoUri, {
     version: ServerApiVersion.v1,
     strict: true,
     depreceationErrors: true,
-  },
+  }, 
 });
 
-// async function pingMongo() {
-//   try {
-//     await mongoClient.connect();
-//     //serverStatus[0] = true;
-//     await mongoClient.db("admin").command({ ping: 1 });
-//     console.log("Pinged scalableMongo");
-//   } finally {
-//     await mongoClient.close();
-//   }
-// }
-
-// push
-// constant that define queries
-// run the queries
-// signle read query 1000 times
-// single write query 1000 times
-// aggregation query 100 times
-// find everyone who follows who follows this user (find all mutual friends)
-
-const runMongo = async (nodeFilePath, edgesFilePath) => {
-  uploadUsersMongo(mongoClient, nodeFilePath);
-  uploadEdgesUsersMongo(mongoClient, edgesFilePath)
-    .then(() => {
-      console.log("Mongo :: Graph Data Loaded successfully");
-      mongoClient.close();
+// reads in a csv file and return an interable array of objects
+async function loadDataAsObjects(filePath) {
+  const records = [];
+  const parser = fs.createReadStream(filePath).pipe(
+    parse({
+      // CSV options if any
     })
-    .catch((err) => [console.log("Mongo :: Error Loading Graph Data: ", err)]);
-};
+  );
+  parser.on("readable", function () {
+    let record;
+    while ((record = parser.read()) !== null) {
+      // Work with each record
+      records.push(record);
+    }
+  });
+  await finished(parser);
+  return records;
+}
 
+
+/***
+ * Load Graph on Mongo
+ */
 async function uploadUsersMongo(mongoClient, nodeFilePath) {
   const database = mongoClient.db("users");
   const usersCollection = database.collection("usersData");
@@ -92,9 +86,8 @@ async function uploadUsersMongo(mongoClient, nodeFilePath) {
     const p = await usersCollection.insertOne(user);
     //console.log([name, age, username]);
   }
-}
 
-// runMongo(nodeFilePath, edgesFilePath);
+}
 
 async function uploadEdgesUsersMongo(mongoClient, edgesFilePath) {
   const database = mongoClient.db("users");
@@ -116,31 +109,20 @@ async function uploadEdgesUsersMongo(mongoClient, edgesFilePath) {
   }
 }
 
-// pingMongo().catch(console.dir);
-
-//runMongo(nodeFilePath, edgesFilePath);
-
-// LOAD ARANGO GRAPH
-
-// reads in a csv file and return an interable array of objects
-async function loadDataAsObjects(filePath) {
-  const records = [];
-  const parser = fs.createReadStream(filePath).pipe(
-    parse({
-      // CSV options if any
+const mongoLoadGraph = async (nodeFilePath, edgesFilePath) => {
+  await uploadUsersMongo(mongoClient, nodeFilePath);
+  await uploadEdgesUsersMongo(mongoClient, edgesFilePath)
+    .then(() => {
+      console.log("Mongo :: Graph Data Loaded successfully");
+      // mongoClient.close();
     })
-  );
-  parser.on("readable", function () {
-    let record;
-    while ((record = parser.read()) !== null) {
-      // Work with each record
-      records.push(record);
-    }
-  });
-  await finished(parser);
-  return records;
-}
+    .catch((err) => [console.log("Mongo :: Error Loading Graph Data: ", err)]);
+};
 
+
+/***
+ * Load Graph on Arango
+ */
 // inserts documents into a collection
 async function arangoLoadNodes(client, filePath) {
   var nodes = await loadDataAsObjects(filePath);
@@ -196,18 +178,8 @@ async function arangoLoadEdges(
   }
 }
 
-let serverStatus = [arangoClient, mongoClient];
-
-const timeQuery = (query, databaseType) => {
-  console.time("Query Timer");
-
-  return console.timeEnd("QUery Timer");
-};
-
-console.log("MongoDB vs ArangoDB: The grand showdown!");
-
 // build the graph on arangoDB
-const buildArangoGraph = async (nodeFilePath, edgesFilePath) => {
+const arangoLoadGraph = async (nodeFilePath, edgesFilePath) => {
   let nodeInsertEndTime, edgeInsertEndTime;
   arangoLoadNodes(arangoClient, nodeFilePath).then(() => {
     nodeInsertEndTime = performance.now();
@@ -224,9 +196,12 @@ const buildArangoGraph = async (nodeFilePath, edgesFilePath) => {
     .catch((err) => [console.log("ARANGO :: Error Loading Graph Data: ", err)]);
 };
 
-// buildArangoGraph(nodeFilePath, edgesFilePath);
+/***
+ * Queries
+ */
 
-const singleReadQuery = async (client, collectionName) => {
+// Single Read
+const arangoSingleReadQuery = async (client, collectionName) => {
   // the FOR loop in AQL expects an iterable like a collection or array. We thus first create a collection object
   let collection = client.collection(collectionName);
   const singleReadQuery = await client.query(aql`
@@ -236,13 +211,10 @@ const singleReadQuery = async (client, collectionName) => {
     RETURN doc
   `);
 
-  // const doc = await singleReadQuery.all()
-  // console.log(doc)
-
   await singleReadQuery.all();
 };
 
-const singleReadMongo = async (client, collectionName) => {
+const mongoSingleReadQuery = async (client, collectionName) => {
   let database = client.db("users");
   let collection = database.collection(collectionName);
 
@@ -251,10 +223,11 @@ const singleReadMongo = async (client, collectionName) => {
     .limit(1000)
     .toArray();
 
-  console.log(singleReadQuery);
+  return singleReadQuery;
 };
 
-const singleWriteMongo = async (client, collectionName) => {
+// single write queries
+const mongoSingleWriteQuery = async (client, collectionName) => {
   let database = client.db("users");
   let collection = database.collection(collectionName);
   let collectionEdges = database.collection("usersEdgesData");
@@ -282,7 +255,44 @@ const singleWriteMongo = async (client, collectionName) => {
   return addUser;
 };
 
-const aggregationQueryMongo = async (client, collectionName) => {
+const arangoSingleWriteQuery = async (client, collectionName) => {
+  // as an example, we would want to find the first ten GenZ users (below 24) and make them mildly famous.
+  let collection = client.collection(collectionName);
+  const getGenZUsersQuery = await client.query(aql`
+    FOR user IN ${collection}
+    FILTER user.age < 24
+    LIMIT 10
+    RETURN user
+  `);
+  const genZ = await getGenZUsersQuery.all();
+
+  let popularUser = await genZ[Math.floor(Math.random() * genZ.length)];
+  // get a random user to make popular
+
+  // This query makes every other genZ person follow our randomly selected popular user
+  const makeFamousQuery = await client.query(aql`
+    FOR genZ IN ${genZ}
+      UPSERT {
+        _from: genZ._id,
+        _to: ${popularUser._id},
+        edge: {
+          name: "follows"
+        }
+      } INSERT {
+        _from: genZ._id,
+        _to: ${popularUser._id},
+        edge: {
+          name: "follows"
+        }
+      } UPDATE {}
+      IN "fakeSocialMediaWithAgeEdges"
+  `);
+
+  await makeFamousQuery.next();
+};
+
+// aggregation queries
+const mongoAggregationQuery = async (client, collectionName) => {
   const database = client.db("users");
   const collection = database.collection(collectionName);
 
@@ -306,7 +316,24 @@ const aggregationQueryMongo = async (client, collectionName) => {
   return ageDistributionQuery;
 };
 
-const distinctNeighbourSecondOrderQueryMongo = async (
+const arangoAggregationQuery = async (client, collectionName) => {
+  // For aggregation we will compute the age distribution of our users for marketing purposes
+  let collection = client.collection(collectionName);
+  let ageDistributionQuery = await client.query(aql`
+    FOR u IN ${collection}
+    COLLECT age = u.age WITH COUNT INTO length
+    RETURN { 
+      "age" : age, 
+      "count" : length 
+    }
+  `);
+  // let ageDistribution = await ageDistributionQuery.all()
+  // return ageDistribution
+  await ageDistributionQuery.all();
+};
+
+// distinct neighbours of second order query
+const mongoDistinctNeighbourSecondOrderQuery = async (
   client,
   collectionName
 ) => {
@@ -350,13 +377,30 @@ const distinctNeighbourSecondOrderQueryMongo = async (
     }
   }
 
-  console.log(mutualFollowers);
+  return mutualFollowers;
 };
 
-distinctNeighbourSecondOrderQueryMongo(mongoClient, "usersData").then(() => {
-  console.log("Mongo :: Distinct Neighbour Second Order Query Completed");
-  mongoClient.close();
-});
+const arangoDistinctNeighbourSecondOrderQuery = async (client, collectionName) => {
+  // given a user, find all their followers and the mutual followers.
+  let collection = client.collection(collectionName);
+  let user = await collection.document("Bogdan_22");
+  let mutualFollowersQuery = await client.query(aql`
+  FOR vertex IN 2..2 OUTBOUND ${user._id}
+    GRAPH 'fakeSMGraph'
+    OPTIONS{parallelism:8,order:'dfs'}
+    RETURN vertex.name
+  `); // graph traversal queries allow for parallelism.
+
+  let mutualFollowers = await mutualFollowersQuery.all();
+  return mutualFollowers
+};
+
+
+
+// distinctNeighbourSecondOrderQueryMongo(mongoClient, "usersData").then(() => {
+//   console.log("Mongo :: Distinct Neighbour Second Order Query Completed");
+//   mongoClient.close();
+// });
 
 // singleReadMongo(mongoClient, "usersData").then(() => {
 //   console.log("Mongo :: Single Read Query Completed");
@@ -370,7 +414,6 @@ distinctNeighbourSecondOrderQueryMongo(mongoClient, "usersData").then(() => {
 //   console.log("Mongo :: Single Write Query Completed");
 // });
 
-// do the same for a single read query on mongo
 
 // singleWriteMongo(mongoClient, "usersData").then(() => {
 //   console.log("Mongo :: Single Write Query Completed");
@@ -399,147 +442,88 @@ distinctNeighbourSecondOrderQueryMongo(mongoClient, "usersData").then(() => {
 //   }),
 // ]);
 
-const singleWriteQuery = async (client, collectionName) => {
-  // as an example, we would want to find the first ten GenZ users (below 24) and make them mildly famous.
-  let collection = client.collection(collectionName);
-  const getGenZUsersQuery = await client.query(aql`
-    FOR user IN ${collection}
-    FILTER user.age < 24
-    LIMIT 10
-    RETURN user
-  `);
-  const genZ = await getGenZUsersQuery.all();
-
-  let popularUser = await genZ[Math.floor(Math.random() * genZ.length)];
-  // get a random user to make popular
-
-  // This query makes every other genZ person follow our randomly selected popular user
-  const makeFamousQuery = await client.query(aql`
-    FOR genZ IN ${genZ}
-      UPSERT {
-        _from: genZ._id,
-        _to: ${popularUser._id},
-        edge: {
-          name: "follows"
-        }
-      } INSERT {
-        _from: genZ._id,
-        _to: ${popularUser._id},
-        edge: {
-          name: "follows"
-        }
-      } UPDATE {}
-      IN "fakeSocialMediaWithAgeEdges"
-  `);
-
-  await makeFamousQuery.next();
-};
-
-const aggregationQuery = async (client, collectionName) => {
-  // For aggregation we will compute the age distribution of our users for marketing purposes
-  let collection = client.collection(collectionName);
-  let ageDistributionQuery = await client.query(aql`
-    FOR u IN ${collection}
-    COLLECT age = u.age WITH COUNT INTO length
-    RETURN { 
-      "age" : age, 
-      "count" : length 
-    }
-  `);
-  // let ageDistribution = await ageDistributionQuery.all()
-  // return ageDistribution
-  await ageDistributionQuery.all();
-};
-
-const distinctNeighbourSecondOrderQuery = async (client, collectionName) => {
-  // given a user, find all their followers and the mutual followers.
-  let collection = client.collection(collectionName);
-  let user = await collection.document("Bogdan_22");
-  let mutualFollowersQuery = await client.query(aql`
-  FOR vertex IN 2..2 OUTBOUND ${user._id}
-    GRAPH 'fakeSMGraph'
-    OPTIONS{parallelism:8,order:'dfs'}
-    RETURN vertex.name
-  `); // graph traversal queries allow for parallelism.
-
-  let mutualFollowers = await mutualFollowersQuery.all();
-  // console.log(mutualFollowers)
-};
 
 /***
  * BENCHMARK QUERIES
  */
-// singleReadQuery(arangoClient, "fakeSocialMediaWithAge")
-// singleWriteQuery(arangoClient, "fakeSocialMediaWithAge")
-// aggregationQuery(arangoClient, "fakeSocialMediaWithAge")
 
 async function measureExecutionTime(functionToTime, functionName, args) {
   const startTime = performanceNow();
 
-  await functionToTime(...args);
+  let result = await functionToTime(...args);
 
-  const endTime = performanceNow();
+  let endTime, executionTime;
 
-  const executionTime = endTime - startTime;
+  await functionToTime(...args).then( () => {
+    endTime = performanceNow()
+    executionTime = endTime - startTime;
+  })
 
   console.log(`${functionName} : ${executionTime} milliseconds`);
+  return [functionName, executionTime]
 }
-
-measureExecutionTime(singleReadMongo, "Single Read Query", [
-  mongoClient,
-  "usersData",
-]);
-measureExecutionTime(singleReadMongo, "Single Read Query", [
-  mongoClient,
-  "usersData",
-]);
 
 // single read and write 1000 times
 // aggregation query 250
 // distinct 250
 
-// const arangoFunctions = {
-//   "Load Graph": [buildArangoGraph, [nodeFilePath, edgesFilePath]],
-//   "Single Read Query": [
-//     singleReadQuery,
-//     [arangoClient, "fakeSocialMediaWithAge"],
-//   ],
-//   "Single Write Query": [
-//     singleWriteQuery,
-//     [arangoClient, "fakeSocialMediaWithAge"],
-//   ],
-//   "Aggregation Query": [
-//     aggregationQuery,
-//     [arangoClient, "fakeSocialMediaWithAge"],
-//   ],
-//   "Distinct Neighbours Second Order": [
-//     distinctNeighbourSecondOrderQuery,
-//     [arangoClient, "fakeSocialMediaWithAge"],
-//   ],
-// };
+const arangoFunctions = {
+  "Arango Load Graph": [arangoLoadGraph, [nodeFilePath, edgesFilePath]],
+  "Arango Single Read Query": [
+    arangoSingleReadQuery,
+    [arangoClient, "fakeSocialMediaWithAge"],
+  ],
+  "Single Write Query": [
+    arangoSingleWriteQuery,
+    [arangoClient, "fakeSocialMediaWithAge"],
+  ],
+  "Arango Aggregation Query": [
+    arangoAggregationQuery,
+    [arangoClient, "fakeSocialMediaWithAge"],
+  ],
+  "Arango Distinct Neighbours Second Order": [
+    arangoDistinctNeighbourSecondOrderQuery,
+    [arangoClient, "fakeSocialMediaWithAge"],
+  ],
+};
 
-// const mongoFunctions = {
-//   "Single Read Query Mongo": [singleReadMongo, [mongoClient, "usersData"]],
-//   "Single Write Query Mongo": [singleWriteMongo, [mongoClient, "usersData"]],
-//   "Aggregation Query Mongo": [
-//     aggregationQueryMongo,
-//     [mongoClient, "usersData"],
-//   ],
-//   "Distinct Neighbours Second Order Mongo": [
-//     distinctNeighbourSecondOrderQueryMongo,
-//     [mongoClient, "usersData"],
-//   ],
-// };
+const mongoFunctions = {
+  "Mongo Load Graph": [mongoLoadGraph, [nodeFilePath, edgesFilePath]],
+  "Mongo Single Read Query Mongo": [mongoSingleReadQuery, [mongoClient, "usersData"]],
+  "Mongo Single Write Query Mongo": [mongoSingleWriteQuery, [mongoClient, "usersData"]],
+  "Mongo Aggregation Query Mongo": [
+    mongoAggregationQuery,
+    [mongoClient, "usersData"],
+  ],
+  "Mongo Distinct Neighbours Second Order Mongo": [
+    mongoDistinctNeighbourSecondOrderQuery,
+    [mongoClient, "usersData"],
+  ],
+};
 
-// Object.keys(mongoFunctions).forEach((metric) => {
-//   console.log(mongoFunctions[metric]);
-// });
+let metrics = {}
 
-// // Object.keys(arangoFunctions).forEach((metric) => {
-//   console.log(arangoFunctions[metric]);
-//   measureExecutionTime(
-//     arangoFunctions[metric][0],
-//     metric,
-//     arangoFunctions[metric][1]
-//   );
-// });
+Object.keys(arangoFunctions).forEach(async (metric) => {
+  // console.log(arangoFunctions[metric]);
+  metrics[metric] = metrics[metric] || []
+  metrics[metric] = measureExecutionTime(
+    arangoFunctions[metric][0],
+    metric,
+    arangoFunctions[metric][1]
+  )[1]
+});
+
+Object.keys(mongoFunctions).forEach(async (metric) => {
+  console.log(mongoFunctions[metric]);
+  metrics[metric] = metrics[metric] || []
+  metrics[metric] = measureExecutionTime(
+    mongoFunctions[metric][0],
+    metric,
+    mongoFunctions[metric][1]
+  )[1]
+});
+
+
+function add(accumulator, a){
+  return accumulator + a
+}
