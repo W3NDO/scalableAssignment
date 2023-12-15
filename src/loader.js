@@ -11,16 +11,6 @@ let nodeFilePath = path.join(__dirname, "datasets/fake_users2.csv");
 let edgesFilePath = path.join(__dirname, "datasets/fake_social_media2.csv");
 
 /***
- * ARANGO Client Setup
- */
-
-const {
-  Graph,
-  GraphEdgeCollection,
-  GraphVertexCollection,
-} = require("arangojs/graph");
-
-/***
  * Arango Client Setup
  */
 const arangoClient = arangojs({
@@ -110,13 +100,11 @@ async function uploadEdgesUsersMongo(mongoClient, edgesFilePath) {
 }
 
 const mongoLoadGraph = async (nodeFilePath, edgesFilePath) => {
-  await uploadUsersMongo(mongoClient, nodeFilePath);
-  await uploadEdgesUsersMongo(mongoClient, edgesFilePath)
-    .then(() => {
-      console.log("Mongo :: Graph Data Loaded successfully");
-      // mongoClient.close();
+  return await uploadUsersMongo(mongoClient, nodeFilePath)
+    .then( async () => {
+      await uploadEdgesUsersMongo(mongoClient, edgesFilePath) 
     })
-    .catch((err) => [console.log("Mongo :: Error Loading Graph Data: ", err)]);
+    .catch((err) => {console.log("Mongo :: Error Loading Graph Data: ", err)});
 };
 
 
@@ -180,20 +168,16 @@ async function arangoLoadEdges(
 
 // build the graph on arangoDB
 const arangoLoadGraph = async (nodeFilePath, edgesFilePath) => {
-  let nodeInsertEndTime, edgeInsertEndTime;
-  arangoLoadNodes(arangoClient, nodeFilePath).then(() => {
-    nodeInsertEndTime = performance.now();
-  });
-  arangoLoadEdges(
-    arangoClient,
-    edgesFilePath,
-    "fakeSocialMediaWithAge",
-    "fakeSocialMediaWithAgeEdges"
-  )
-    .then(() => {
-      console.log("ARANGO :: Graph Data Loaded successfully");
+  return await arangoLoadNodes(arangoClient, nodeFilePath)
+    .then(async () => {
+      await arangoLoadEdges(
+        arangoClient,
+        edgesFilePath,
+        "fakeSocialMediaWithAge",
+        "fakeSocialMediaWithAgeEdges"
+      )
     })
-    .catch((err) => [console.log("ARANGO :: Error Loading Graph Data: ", err)]);
+    .catch( (err) => {console.log("ARANGO :: Error Loading Graph: ", err)});
 };
 
 /***
@@ -447,20 +431,22 @@ const arangoDistinctNeighbourSecondOrderQuery = async (client, collectionName) =
  * BENCHMARK QUERIES
  */
 
-async function measureExecutionTime(functionToTime, functionName, args) {
+async function measureExecutionTime(resultsObject, functionToTime, functionName, args) {
+  resultsObject[functionName] = resultsObject[functionName] || []
   const startTime = performanceNow();
 
   let result = await functionToTime(...args);
 
   let endTime, executionTime;
 
-  await functionToTime(...args).then( () => {
+  return await functionToTime(...args).then( () => {
     endTime = performanceNow()
     executionTime = endTime - startTime;
+    resultsObject[functionName].push(executionTime)
+    console.log(resultsObject)
   })
 
-  console.log(`${functionName} : ${executionTime} milliseconds`);
-  return [functionName, executionTime]
+  // console.log(`${functionName} : ${executionTime} milliseconds`);
 }
 
 // single read and write 1000 times
@@ -468,18 +454,18 @@ async function measureExecutionTime(functionToTime, functionName, args) {
 // distinct 250
 
 const arangoFunctions = {
-  "Arango Load Graph": [arangoLoadGraph, [nodeFilePath, edgesFilePath]],
+  // "Arango Load Graph": [arangoLoadGraph, [nodeFilePath, edgesFilePath]],
   "Arango Single Read Query": [
     arangoSingleReadQuery,
     [arangoClient, "fakeSocialMediaWithAge"],
   ],
-  "Single Write Query": [
+  "Arango Single Write Query": [
     arangoSingleWriteQuery,
     [arangoClient, "fakeSocialMediaWithAge"],
   ],
   "Arango Aggregation Query": [
     arangoAggregationQuery,
-    [arangoClient, "fakeSocialMediaWithAge"],
+  b  [arangoClient, "fakeSocialMediaWithAge"],
   ],
   "Arango Distinct Neighbours Second Order": [
     arangoDistinctNeighbourSecondOrderQuery,
@@ -488,7 +474,7 @@ const arangoFunctions = {
 };
 
 const mongoFunctions = {
-  "Mongo Load Graph": [mongoLoadGraph, [nodeFilePath, edgesFilePath]],
+  // "Mongo Load Graph": [mongoLoadGraph, [nodeFilePath, edgesFilePath]],
   "Mongo Single Read Query Mongo": [mongoSingleReadQuery, [mongoClient, "usersData"]],
   "Mongo Single Write Query Mongo": [mongoSingleWriteQuery, [mongoClient, "usersData"]],
   "Mongo Aggregation Query Mongo": [
@@ -503,27 +489,34 @@ const mongoFunctions = {
 
 let metrics = {}
 
-Object.keys(arangoFunctions).forEach(async (metric) => {
-  // console.log(arangoFunctions[metric]);
-  metrics[metric] = metrics[metric] || []
-  metrics[metric] = measureExecutionTime(
-    arangoFunctions[metric][0],
-    metric,
-    arangoFunctions[metric][1]
-  )[1]
-});
-
-Object.keys(mongoFunctions).forEach(async (metric) => {
-  console.log(mongoFunctions[metric]);
-  metrics[metric] = metrics[metric] || []
-  metrics[metric] = measureExecutionTime(
-    mongoFunctions[metric][0],
-    metric,
-    mongoFunctions[metric][1]
-  )[1]
-});
-
-
-function add(accumulator, a){
-  return accumulator + a
+async function getMetrics(runs, resultsObject){
+  let dbFunctions = [mongoFunctions, arangoFunctions]
+  let i = 0;
+  for(i =0; i < runs; i++){
+    dbFunctions.forEach( db => {
+      Object.keys(db).forEach(async (metric) => {
+        await measureExecutionTime(
+          resultsObject,
+          db[metric][0],
+          metric,
+          db[metric][1]
+        )
+      });
+    })
+  }
 }
+
+results = {}
+async function runBenchmark() {
+  console.log(await getMetrics(10, results ))
+  
+}
+runBenchmark()
+
+/***
+ * FEEDBACK
+ * make sure we figure out why we have those differences
+ * run more experiments outside docker on mongo
+ * have a look at query optimization
+ * include optimized charts and original slide charts
+ */
